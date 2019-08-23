@@ -10,7 +10,7 @@
             android:title="Paid apps" />
     <item
             android:id="@+id/mnuSongs"
-            android:title="Songs" />
+            android:title="Songs" ></item>
     <group
             android:id="@+id/mnugrpLimit"
             android:checkableBehavior="single">
@@ -22,4 +22,7 @@
                 android:id="@+id/mnu25"
                 android:title="Top 25" />
     </group>
+    <item
+            android:id="@+id/mnuRefresh"
+            android:title="Refresh" />
 </menu>
