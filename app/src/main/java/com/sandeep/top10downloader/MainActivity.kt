@@ -1,22 +1,14 @@
 package com.sandeep.top10downloader
 
-import android.content.Context
-import android.os.AsyncTask
-import android.support.v7.app.AppCompatActivity
+
+import androidx.appcompat.app.AppCompatActivity
 import android.os.Bundle
 import android.util.Log
 import android.view.Menu
 import android.view.MenuItem
-import android.widget.ArrayAdapter
-import android.widget.ListView
+import androidx.lifecycle.Observer
+import androidx.lifecycle.ViewModelProviders
 import kotlinx.android.synthetic.main.activity_main.*
-import java.io.IOException
-import java.lang.Exception
-import java.lang.StringBuilder
-import java.net.HttpURLConnection
-import java.net.MalformedURLException
-import java.net.URL
-import kotlin.properties.Delegates
 
 class FeedEntry {
     var name: String = ""
@@ -35,17 +27,22 @@ class FeedEntry {
         """.trimIndent()
     }
 }
+
+private const val TAG = "MainActivity"
+private const val STATE_URL = "feedUrl"
+private const val STATE_LIMIT = "feedLimit"
+
 class MainActivity : AppCompatActivity() {
 
-    private val TAG = "MainActivity"
 
-    private var downloadData: DownloadData? = null //by lazy { DownloadData(this, xmlListView)}
+
+
 
     private var feedUrl: String = "http://ax.itunes.apple.com/WebObjects/MZStoreServices.woa/ws/RSS/topMovies/limit=%d/xml"
     private var feedLimit: Int = 10
-    private var feedCachedUrl = "INVALIDATED"
-    private val STATE_URL = "feedUrl"
-    private val STATE_LIMIT = "feedLimit"
+    private val feedViewModel: FeedViewModel by lazy { ViewModelProviders.of(this).get(FeedViewModel::class.java) }
+
+
 
 
 
@@ -56,32 +53,26 @@ class MainActivity : AppCompatActivity() {
 
         Log.d(TAG, "onCreate called")
 
-
+        val feedAdapter = FeedAdapter(this, R.layout.list_record, EMPTY_FEED_LIST)
+        xmlListView.adapter = feedAdapter
 
         if (savedInstanceState != null) {
             feedUrl = savedInstanceState.getString(STATE_URL).toString()
             feedLimit = savedInstanceState.getInt(STATE_LIMIT)
         }
 
-        downloadUrl(feedUrl.format(feedLimit))
+
+        feedViewModel.feedEntries.observe(this, Observer<List<FeedEntry>> {feedEntries -> feedAdapter.setFeedList(feedEntries?: EMPTY_FEED_LIST) })
+        //feedViewModel.feedEntries.observe(this, Observer<List<FeedEntry>> {feedEntries -> feedAdapter.setFeedList(feedEntries) })
+
+        feedViewModel.downloadUrl(feedUrl.format(feedLimit))
 
         // val downloadData = DownloadData(this, xmlListView)
 
         Log.d(TAG, "onCreate done")
     }
 
-    private fun downloadUrl(feedUrl: String) {
-        if ( feedUrl != feedCachedUrl) {
-            Log.d(TAG, "download url")
-            downloadData = DownloadData(this, xmlListView)
-            downloadData?.execute(feedUrl)
-            feedCachedUrl = feedUrl
-            Log.d(TAG, "download url done")
-        } else {
-            Log.d(TAG, "download url - url not changed")
-        }
 
-    }
 
     override fun onCreateOptionsMenu(menu: Menu?): Boolean {
         menuInflater.inflate(R.menu.feed_menu, menu)
@@ -113,12 +104,12 @@ class MainActivity : AppCompatActivity() {
                     Log.d(TAG, "onItemSelected: ${item.title} settign limit unchanged")
                 }
             }
-            R.id.mnuRefresh -> feedCachedUrl = "INVALIDATED"
+            R.id.mnuRefresh -> feedViewModel.invalidate()
             else ->
                 return super.onOptionsItemSelected(item)
         }
 
-        downloadUrl(feedUrl.format(feedLimit))
+        feedViewModel.downloadUrl(feedUrl.format(feedLimit))
         return true
     }
 
@@ -128,115 +119,6 @@ class MainActivity : AppCompatActivity() {
         outState.putInt(STATE_LIMIT, feedLimit)
     }
 
-    override fun onDestroy() {
-        super.onDestroy()
-        downloadData?.cancel(true)
-    }
-
-    companion object {
-        private class DownloadData(context: Context, listView: ListView) : AsyncTask<String, Void, String>() {
-            private val TAG = "DownloadData"
-
-            var propConext: Context by Delegates.notNull()
-            var propListView: ListView by Delegates.notNull()
-
-            init {
-                propConext = context
-                propListView = listView
-            }
-
-            override fun onPostExecute(result: String) {
-                super.onPostExecute(result)
-                // Log.d(TAG, "onPostExecute called parameter is $result")
-                val parseApplications = ParseApplications()
-                parseApplications.parse(result)
-
-                //val arrayAdapter = ArrayAdapter<FeedEntry>(propConext, R.layout.list_item, parseApplications.applications)
-                //propListView.adapter = arrayAdapter
-
-                val feedAdapter = FeedAdapter(propConext, R.layout.list_record, parseApplications.applications)
-                propListView.adapter = feedAdapter
-            }
-
-            override fun doInBackground(vararg url: String?): String {
-                // Log.d(TAG, "doInBackground starts with ${url[0]}")
-
-                val rssFeed = downloadXML(url[0])
-
-                if (rssFeed.isEmpty()) {
-                    Log.e(TAG, "doInBackground : error in downloading")
-                }
-                return rssFeed
-            }
-
-            private fun downloadXML( urlpath: String?) : String {
-                return URL(urlpath).readText()
-
-            }
-
-            private fun downloadXML1( urlpath: String?) : String {
-                val xmlResult = StringBuilder()
-
-                try {
-                    val url = URL(urlpath)
-
-                    val connection: HttpURLConnection = url.openConnection() as HttpURLConnection
-                    val response = connection.responseCode
-
-                    Log.d(TAG, "downloadXML:  response code is $response")
-
-                    /*val inputstream = connection.inputStream
-                    val inputStreamReader = InputStreamReader(inputstream)
-                    val reader = BufferedReader(inputStreamReader)*/
-
-                    /*var reader = BufferedReader(InputStreamReader(connection.inputStream))
-
-                    val inputBuffer = CharArray(500)
-                    var charsRead = 0
-                    while (charsRead >= 0) {
-                        charsRead = reader.read(inputBuffer)
-                        if (charsRead > 0) {
-                            xmlResult.append(String(inputBuffer, 0, charsRead))
-                        }
-                    }
-
-                    reader.close()*/
-
-                    //val stream = connection.inputStream
-                    connection.inputStream.buffered().reader().use { xmlResult.append(it.readText()) }
-
-                    Log.d(TAG, "received ${xmlResult.length} bytes")
-
-                    return xmlResult.toString()
-
-                /*} catch (e: MalformedURLException) {
-                    Log.e(TAG, "downloadXML:  invalid url ${e.message}")
-                } catch (e: IOException) {
-                    Log.e(TAG, "downloadXML: IOException ${e.message}")
-                } catch (e: SecurityException) {
-                    Log.e(TAG, "downloadXML: SecurityException needs permission ${e.message}")
-                }catch (e: Exception) {
-                    Log.e(TAG, "downloadXML: unknown error ${e.message}")
-                }*/
-
-                } catch (e: Exception){
-                    val errorMessage: String = when (e) {
-                        is MalformedURLException -> "donloadXML:  invalid url ${e.message}"
-                        is IOException -> "donloadXML:  IOException ${e.message}"
-                        is SecurityException -> { e.printStackTrace()
-                            "downloadXML: SecurityException needs permission ${e.message}"
-                        }
-                        else -> "downloadXML: unknown error ${e.message}"
-                    }
-
-                    Log.e(TAG, errorMessage)
-
-                }
-                return "" //if here, there is an issue
-            }
-
-        }
-    }
 
 
 }
